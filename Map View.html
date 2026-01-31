@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>NGA Borehole Search</title>
+
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css" />
+<script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+<script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
+<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" />
+<script src="https://cdnjs.cloudflare.com/ajax/libs/dom-to-image/2.6.0/dom-to-image.min.js"></script>
+
+<style>
+#map { height: 600px; }
+#radius-input { width: 300px; accent-color: green; }
+#radius-value { display:block; margin-top:5px; font-weight:bold; }
+#location-message { color:red; margin-top:5px; }
+</style>
+</head>
+<body class="bg-gradient-to-r from-green-600 via-green-500 to-green-400 text-white font">
+
+<div class="w-full max-w-6xl p-6 mx-auto bg-white text-gray-800 rounded-lg shadow-lg mt-10 relative">
+    <div class="text-center py-6">
+        <h2 class="text-4xl font-extrabold mb-3">NGA Borehole Search</h2>
+        <p class="text-lg">Enter a street address or coordinates, adjust the radius, and view NGA Boreholes.</p>
+    </div>
+
+    <div class="mb-4">
+        <label for="location-input" class="block text-sm font-semibold mb-1">Search Location:</label>
+        <div class="flex items-center space-x-2">
+            <input type="text" id="location-input" placeholder="Enter coordinates or full street address" class="w-full p-2 border rounded-lg focus:outline-none focus:ring-2" autocomplete="off" />
+            <button id="go-btn" class="p-2 bg-green-500 text-white rounded-lg hover:bg-red-600 focus:bg-green-500">Go</button>
+            <button id="reset-btn" class="p-2 bg-green-500 text-white rounded-lg hover:bg-red-600 focus:bg-green-500">Reset</button>
+        </div>
+        <p id="location-message"></p>
+    </div>
+
+    <label for="radius-input">Radius:</label>
+    <input id="radius-input" type="range" min="0" max="4000" step="100" value="200">
+    <span id="radius-value">200 m</span>
+
+    <div id="info" style="margin-bottom: 10px; font-weight: bold;"></div>
+
+    <!-- Export button above the map -->
+    <div class="flex justify-start mb-2">
+        <button id="export-btn" class="p-2 bg-green-500 text-white rounded-lg hover:bg-green-600 font-bold">Export Map PNG</button>
+    </div>
+
+    <div id="map"></div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+
+    const defaultLatLng = [-25.7461, 28.1881]; // Pretoria
+    const map = L.map('map').setView(defaultLatLng, 6);
+
+    const streets = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '&copy; OpenStreetMap' }).addTo(map);
+    const satellite = L.tileLayer('https://{s}.google.com/vt/lyrs=s&x={x}&y={y}&z={z}', { maxZoom: 20, subdomains: ['mt0','mt1','mt2','mt3'] });
+    L.control.layers({ "Streets": streets, "Satellite": satellite }, null, { collapsed:false }).addTo(map);
+
+    const redIcon = new L.Icon({
+        iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-red.png',
+        shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
+        iconSize: [25,41], iconAnchor:[12,41], popupAnchor:[1,-34], shadowSize:[41,41]
+    });
+
+    let marker = L.marker(defaultLatLng, { draggable:true, icon:redIcon }).addTo(map);
+    let circle = L.circle(defaultLatLng, { radius:200, color:'red', fillColor:'#ff0000', fillOpacity:0.4 }).addTo(map);
+
+    const radiusInput = document.getElementById('radius-input');
+    const radiusValue = document.getElementById('radius-value');
+    const locationInput = document.getElementById('location-input');
+    const locationMessage = document.getElementById('location-message');
+    const infoDiv = document.getElementById('info');
+
+    function updateInfo(latlng, radius){
+        const displayRadius = radius < 1 ? `${(radius*1000).toFixed(0)} m` : `${Math.round(radius)} km`;
+        infoDiv.innerText = `Location: ${latlng.lat.toFixed(4)}, ${latlng.lng.toFixed(4)} | Radius: ${displayRadius}`;
+    }
+
+    marker.on('move', function(e){
+        const newPos = e.target.getLatLng();
+        circle.setLatLng(newPos);
+        updateInfo(newPos, circle.getRadius()/1000);
+    });
+
+    radiusInput.addEventListener('input', function(){
+        const val = parseInt(this.value);
+        circle.setRadius(val);
+        radiusValue.innerText = val<1000 ? `${val} m` : `${(val/1000)} km`;
+        updateInfo(marker.getLatLng(), val/1000);
+    });
+
+    // --- NGA Boreholes ---
+    const boreholeCluster = L.markerClusterGroup({ iconCreateFunction: function(){ return L.divIcon({html:'',className:'my-cluster',iconSize:L.point(0,0)}); } });
+    map.addLayer(boreholeCluster);
+
+    function loadBoreholes(){
+    boreholeCluster.clearLayers();
+    Papa.parse('data/NGA_Boreholes.csv', {
+        download:true, header:true,
+        complete:function(results){
+            const boreholes = results.data.filter(b => b.GeositeInfo_Latitude && b.GeositeInfo_Longitude);
+            boreholes.forEach(bh => {
+                const lat = parseFloat(bh.GeositeInfo_Latitude);
+                const lon = parseFloat(bh.GeositeInfo_Longitude);
+                const status = bh.GeositeInfo_GeositeStatus;
+                if(!isNaN(lat) && !isNaN(lon)){
+                    let color = "blue";
+                    if(status.includes("Monitoring")) color="green";
+                    else if(status.includes("Abandoned")||status.includes("Destroyed")) color="red";
+                    else if(status.includes("Unknown")) color="orange";
+                    else if(status.includes("Standby")) color="purple";
+                    else color="blue"; // default color for active/in use
+
+                    const bhMarker = L.circleMarker([lat,lon],{
+                        radius:4,
+                        fillColor:color,
+                        color:"#000",
+                        weight:1,
+                        opacity:1,
+                        fillOpacity:0.8
+                    }).bindPopup(`
+                        <b>Status:</b> ${status}<br>
+                        <b>Province:</b> ${bh.Province}<br>
+                        <b>Coordinates:</b> ${lat.toFixed(4)}, ${lon.toFixed(4)}
+                    `);
+                    boreholeCluster.addLayer(bhMarker);
+                }
+            });
+        }
+    });
+}
+
+    loadBoreholes();
+
+    // --- Pin location using Nominatim first, OpenCage fallback ---
+    async function pinAddress(query){
+        locationMessage.innerText='';
+
+        const parts = query.split(',').map(s=>parseFloat(s.trim()));
+        if(parts.length===2 && !isNaN(parts[0]) && !isNaN(parts[1])){
+            pinLocation(L.latLng(parts[0], parts[1]));
+            return;
+        }
+
+        try{
+            const nomRes = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&addressdetails=1&countrycodes=za&limit=1`);
+            const nomData = await nomRes.json();
+            if(nomData && nomData.length>0){
+                const lat = parseFloat(nomData[0].lat);
+                const lon = parseFloat(nomData[0].lon);
+                pinLocation(L.latLng(lat, lon));
+                return;
+            }
+        } catch(err){ console.error("Nominatim error:", err); }
+
+        try{
+            const key = 'YOUR_OPENCAGE_KEY';
+            const ocRes = await fetch(`https://api.opencagedata.com/geocode/v1/json?q=${encodeURIComponent(query)}&key=${key}&limit=1`);
+            const ocData = await ocRes.json();
+            if(ocData.results && ocData.results.length>0){
+                const lat = ocData.results[0].geometry.lat;
+                const lon = ocData.results[0].geometry.lng;
+                pinLocation(L.latLng(lat, lon));
+                return;
+            }
+        } catch(err){ console.error("OpenCage error:", err); }
+
+        locationMessage.innerText='Address not found. Try full street, number, city.';
+    }
+
+    function pinLocation(latlng){
+        marker.setLatLng(latlng);
+        circle.setLatLng(latlng);
+        map.setView(latlng,16);
+        updateInfo(latlng, circle.getRadius()/1000);
+    }
+
+    document.getElementById('go-btn').addEventListener('click', ()=> pinAddress(locationInput.value));
+    locationInput.addEventListener('keydown', e => { if(e.key==='Enter'){ e.preventDefault(); pinAddress(locationInput.value); } });
+
+    document.getElementById('reset-btn').addEventListener('click', ()=>{
+        pinLocation(L.latLng(defaultLatLng[0], defaultLatLng[1]));
+        circle.setRadius(200);
+        radiusInput.value=200;
+        radiusValue.innerText='200 m';
+        locationInput.value='';
+        locationMessage.innerText='';
+    });
+
+    // --- Export Map Button ---
+    document.getElementById('export-btn').addEventListener('click', function(){
+        domtoimage.toPng(document.getElementById('map'))
+        .then(function(dataUrl){
+            const link = document.createElement('a');
+            link.download = 'NGA_Map.png';
+            link.href = dataUrl;
+            link.click();
+        })
+        .catch(function(err){ console.error('Export error', err); });
+    });
+
+    updateInfo({lat:defaultLatLng[0], lng:defaultLatLng[1]}, 0.2);
+
+});
+</script>
+</body>
+</html>

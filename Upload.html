@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+        integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+
+    <!-- Make sure you put this AFTER Leaflet's CSS -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+        integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+
+    <style>
+        #map {
+            height: 900px;
+            width: 100%;
+        }
+
+        .input-container {
+            margin: 10px 0;
+        }
+
+        input {
+            margin-right: 10px;
+            padding: 5px;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="bg-gradient-to-r from-green-600 via-green-500 to-green-400 text-white font">
+        <div class="w-full max-w-Ig p-6 bg-white text-gray-800 rounded-Ig shodow-Ig">
+            <div class="text-centre py-6">
+                <h1 class="text-4xl font-extrabold mb-3">
+                    Interactive Map Tool
+                </h1>
+                <p class="text-Ig">
+                    Set a location, adjust the radius, and explore dynamically.
+                </p>
+            </div>
+            <div class="mb-4">
+                <label for="location-input" class="block text-sm font-semibold mb-1">
+                    Search Location:
+                </label>
+                <div class="flex items-center space-x-2">
+                    <input type="text" id="location-input"
+                        placeholder="Enter a location (e.g coordinates or street name)"
+                        class="w-full p-2 border rounded-Ig focus:outline-none focus:ring-2" />
+                    <button id="reset-btn" type="reset"
+                        class="p-2 bg-green-500 text-white rounded-lg hover:bg-red-600 focus:bg-green-500">
+                        Reset
+                    </button>
+                </div>
+                <p id="location-message" class="message mt-2 text-red-500"></p>
+            </div>
+            <div class="mb-4">
+                <label for="radius-input" class="block text-sm font-semibold mb-1">
+                    Radius (km)
+                </label>
+                <div class="flex items-center space-x-2">
+                    <input type="range" id="radius-input" min="1" max="50" value="2" class="w-full accent-blue-500" />
+                    <span id="radius-value" class="text-Ig font-semibold">
+                        2 km
+                    </span>
+                </div>
+            </div>
+            <div id="map" class="rounded-Ig" shadow-Ig h-[400px]"></div>
+            <div class="mt-4 text-centre">
+                <p class="text-sm text-gray-600" id="info">
+                    Drag the marker to adjust the location
+                </p>
+            </div>
+        </div>
+    </div>
+
+
+
+
+
+
+
+
+
+    <div id="map"></div>
+</body>
+
+<script>
+    var map = L.map('map').setView([-30.5595, 22.9375], 18);
+
+    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 19,
+        attribution: '&copy; <a href="http://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+    }).addTo(map);
+
+
+    var redIcon = L.icon({
+        iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-red.png',
+        shadowUrl: 'https://unpkg.com/leaflet@1.9.3/dist/images/marker-shadow.png',
+        iconSize: [25, 41],
+        iconAnchor: [12, 41],
+        popupAnchor: [1, -34],
+        shadowSize: [41, 41]
+    });
+
+
+
+    var marker = L.marker([-30.5595, 22.9375], { icon: redIcon }).addTo(map);
+
+
+
+
+
+
+</script>
+
+</html>
+
+
+radiusInput.addEventListener('input', function () {
+let sliderVal = parseInt(radiusInput.value, 10);
+let actualRadius;
+
+// Map 0–900 to 0–900m, 1000 to 1km, 1100 to 2km
+if (sliderVal <= 900) { actualRadius=sliderVal; // in meters } else if (sliderVal===1000) { actualRadius=1000; } else if
+    (sliderVal===1100) { actualRadius=2000; } circle.setRadius(actualRadius); radiusValue.innerText=actualRadius < 1000
+    ? `${actualRadius} m` : `${actualRadius / 1000} km`; updateInfo(marker.getLatLng(), actualRadius / 1000); });
+    radiusInput.addEventListener('input', function () { const sliderVal=parseInt(radiusInput.value, 10); let
+    actualRadius; if (sliderVal <=900) { actualRadius=sliderVal; // use value as meters } else if (sliderVal===1000) {
+    actualRadius=1000; } else if (sliderVal===1100) { actualRadius=2000; } circle.setRadius(actualRadius);
+    radiusValue.innerText=actualRadius < 1000 ? `${actualRadius} m` : `${actualRadius / 1000} km`;
+    updateInfo(marker.getLatLng(), actualRadius / 1000); }); });
